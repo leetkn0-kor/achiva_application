@@ -3,25 +3,22 @@ import { MutableRefObject } from 'react';
 import { Alert } from 'react-native';
 import { WebView } from 'react-native-webview';
 
-// ## 타입 정의 ##
 
 // 웹과 주고받을 메시지에 대한 약속(타입)
-// | (파이프) 기호는 '또는'을 의미합니다. type은 'REQUEST_CAMERA' 또는 'IMAGE_DATA'만 가능합니다.
+
 type WebViewMessage = {
   type: 'REQUEST_CAMERA' | 'IMAGE_DATA';
-  data?: any; // data는 어떤 타입이든 올 수 있으며, 없을 수도 있습니다.
+  data?: any; 
 };
 
-// WebView의 ref에 대한 타입 정의
 type WebViewRef = MutableRefObject<WebView | null>;
 
-// ## 커스텀 훅 ##
 
-// webViewRef를 인자로 받아 웹과 통신하는 훅(hook)
+
+
 export function useWebViewBridge(webViewRef: WebViewRef) {
   
-  // 웹으로부터 메시지를 받았을 때 실행될 메인 핸들러
-  // event 객체의 타입도 명확히 지정해줍니다.
+  
   const onMessage = async (event: { nativeEvent: { data: string } }) => {
     try {
       // 웹에서 받은 데이터를 WebViewMessage 타입으로 변환
@@ -38,7 +35,6 @@ export function useWebViewBridge(webViewRef: WebViewRef) {
   };
 
   // 앱에서 웹으로 메시지를 보내는 함수
-  // message 인자는 우리가 정의한 WebViewMessage 타입만 받을 수 있습니다.
   const postMessageToWeb = (message: WebViewMessage) => {
     if (webViewRef.current) {
       const script = `
