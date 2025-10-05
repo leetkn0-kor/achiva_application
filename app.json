@@ -26,6 +26,13 @@
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "게시글 사진 첨부를 위해 카메라 접근 권한이 필요합니다.",
+          "photosPermission": "게시글 사진 첨부를 위해 사진첩 접근 권한이 필요합니다."
+        }
+      ],
       "expo-router",
       [
         "expo-splash-screen",

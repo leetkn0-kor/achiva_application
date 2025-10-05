@@ -1,31 +1,13 @@
 import React from 'react';
-import { StyleSheet } from 'react-native';
-import { WebView } from 'react-native-webview';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import AppNavigator from '../src/navigation/AppNavigator';
 
-import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
-
-function App() {
-  const myWebsiteUrl = 'https://achiva.kr/?is_app=true'; 
-
+const App: React.FC = () => {
   return (
     <SafeAreaProvider>
-      <SafeAreaView style={styles.container}>
-        <WebView
-          source={{ uri: myWebsiteUrl }}
-          style={styles.webview}
-        />
-      </SafeAreaView>
+      <AppNavigator />
     </SafeAreaProvider>
   );
-}
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  webview: {
-    flex: 1,
-  },
-});
+};
 
 export default App;
