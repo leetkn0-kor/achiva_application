@@ -88,7 +88,7 @@ export default function RootLayout() {
             // iOS 시스템이 자동으로 인셋을 더하지 않도록
             contentInsetAdjustmentBehavior="never"
             // (선택) 위아래 바운스 시 뒤 배경 노출을 줄이고 싶으면:
-            // bounces={false}
+            bounces={false}
             // 아래는 기존에 쓰던 옵션들 (필요 시 유지)
             javaScriptEnabled
             domStorageEnabled
