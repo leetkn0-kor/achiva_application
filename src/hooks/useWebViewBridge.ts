@@ -89,8 +89,8 @@ export function useWebViewBridge(webViewRef: WebViewRef) {
     handleImageResult(result);
   };
 
-  // 이미지 선택/촬영 결과를 처리하는 공통 함수
-  // result 인자의 타입은 ImagePicker 라이브러리가 제공하는 타입을 사용합니다.
+  // 이미지 선택/촬영 결과 처리
+  // result 인자의 타입은 ImagePicker 사용ㅇ
   const handleImageResult = (result: ImagePicker.ImagePickerResult) => {
     if (!result.canceled) {
       postMessageToWeb({

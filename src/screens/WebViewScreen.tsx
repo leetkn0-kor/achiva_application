@@ -16,11 +16,11 @@ const WebViewScreen: React.FC = () => {
   return (
     <SafeAreaView style={styles.container}>
       <WebView
-        ref={webViewRef} // 위에서 만든 참조를 웹뷰와 연결
+        ref={webViewRef} 
         source={{ uri: myWebsiteUrl }}
         style={styles.webview}
-        onMessage={onMessage} // 웹에서 메시지를 보내면 onMessage 함수가 실행됨
-        javaScriptEnabled={true} // 웹뷰 내에서 자바스크립트 실행 허용
+        onMessage={onMessage} 
+        javaScriptEnabled={true} 
       />
     </SafeAreaView>
   );
