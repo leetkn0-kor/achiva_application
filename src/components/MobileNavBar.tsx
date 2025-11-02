@@ -4,11 +4,11 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 type Tab = { label: string; path: string; };
 const TABS: Tab[] = [
-  { label: '홈', path: '/' },
-  { label: '검색', path: '/search' },
-  { label: '글쓰기', path: '/feed' },
-  { label: '응원함', path: '/cheer' },
-  { label: '프로필', path: '/me' },
+  { label: '홈', path: '/[nickname]/home' },
+  { label: '목표', path: '/[nickname]/goals' },
+  { label: '피드', path: '/' },
+  { label: '응원함', path: '/cheer' },    // Modal
+  { label: '프로필', path: '/[nickname]/me' },
 ];
 
 interface Props {
