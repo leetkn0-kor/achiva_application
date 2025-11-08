@@ -9,9 +9,29 @@ import { WebView } from 'react-native-webview';
 
 
 const APP_BG = '#ffffff'; //웹배경색_확인 후 수정, 로그인 페이지 불일치 수정 필요
-const HOME_URL = 'https://achiva.kr'; 
+const HOME_URL = 'https://achiva.kr';
 
 const INACTIVE_NOTIFICATION_ID_KEY = 'inactive-user-notification-id';
+
+const INJECT_CONSOLE = `
+(function() {
+  function send(type, args){
+    try {
+      window.ReactNativeWebView && window.ReactNativeWebView.postMessage(
+        JSON.stringify({ __wv_console__: true, type, args })
+      );
+    } catch (e) {}
+  }
+  ['log','info','warn','error','debug'].forEach(function(type){
+    var orig = console[type];
+    console[type] = function(){
+      send(type, Array.prototype.slice.call(arguments));
+      try { orig && orig.apply(console, arguments); } catch(e){}
+    }
+  });
+})();
+true;
+`;
 
 export default function RootLayout() {
   const appState = useRef(AppState.currentState);
@@ -49,14 +69,14 @@ export default function RootLayout() {
   };
 
   Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true, // 이 값을 true로 해야 iOS에서 진동/소리가 납니다.
-    shouldSetBadge: false,
-    shouldShowBanner: true, // (최신 expo-notifications 타입 호환용)
-    shouldShowList: true, // (최신 expo-notifications 타입 호환용)
-  }),
-});
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldPlaySound: true, // 이 값을 true로 해야 iOS에서 진동/소리가 납니다.
+      shouldSetBadge: false,
+      shouldShowBanner: true, // (최신 expo-notifications 타입 호환용)
+      shouldShowList: true, // (최신 expo-notifications 타입 호환용)
+    }),
+  });
 
   const scheduleInactiveUserNotification = async () => {
     const existingId = await AsyncStorage.getItem(INACTIVE_NOTIFICATION_ID_KEY);
@@ -67,9 +87,10 @@ export default function RootLayout() {
         body: '새로운 소식이 기다리고 있어요. 다시 방문해보세요!',
         sound: true
       },
-      trigger: { 
+      trigger: {
         type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
-        seconds: 10 }, // 현재 10초로 설정
+        seconds: 10
+      }, // 현재 10초로 설정
     });
     await AsyncStorage.setItem(INACTIVE_NOTIFICATION_ID_KEY, id);
   };
@@ -95,15 +116,40 @@ export default function RootLayout() {
             // 웹뷰는 투명처리
             style={{ flex: 1, backgroundColor: 'transparent' }}
             contentInsetAdjustmentBehavior="never"
-            
+
             //bounces={false} ->> 바운스 일단 넣은 상태
-            
+
             javaScriptEnabled
             domStorageEnabled
             startInLoadingState
             setSupportMultipleWindows={false}
             onRenderProcessGone={() => webref.current?.reload()}
             onContentProcessDidTerminate={() => webref.current?.reload()}
+
+            onMessage={(e) => {
+              try {
+                const data = JSON.parse(e.nativeEvent.data);
+                if (data.__wv_console__) {
+                  const type = data.type as 'log' | 'info' | 'warn' | 'error' | 'debug';
+                  const args = Array.isArray(data.args) ? data.args : [data.args];
+
+                  // 호출 가능한 메서드만 매핑
+                  const loggers: Record<typeof type, (...a: any[]) => void> = {
+                    log: console.log.bind(console),
+                    info: console.info.bind(console),
+                    warn: console.warn.bind(console),
+                    error: console.error.bind(console),
+                    debug: console.debug.bind(console),
+                  };
+
+                  (loggers[type] ?? console.log)('[WV]', ...args);
+                  return;
+                }
+              } catch {
+                console.log('[WV][message]', e.nativeEvent.data);
+              }
+            }}
+
           />
         </View>
       </SafeAreaView>
