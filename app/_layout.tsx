@@ -1,3 +1,5 @@
+
+import { useWebViewBridge } from '@/src/hooks/useWebViewBridge';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import { StatusBar } from 'expo-status-bar';
@@ -16,6 +18,27 @@ import NativeNavBar from '../src/components/MobileNavBar';
 const APP_BG = '#ffffff';
 const HOME_URL = 'https://achiva.kr';
 const INACTIVE_NOTIFICATION_ID_KEY = 'inactive-user-notification-id';
+
+const INJECT_CONSOLE = `
+(function() {
+  function send(type, args){
+    try {
+      window.ReactNativeWebView && window.ReactNativeWebView.postMessage(
+        JSON.stringify({ __wv_console__: true, type, args })
+      );
+    } catch (e) {}
+  }
+  ['log','info','warn','error','debug'].forEach(function(type){
+    var orig = console[type];
+    console[type] = function(){
+      send(type, Array.prototype.slice.call(arguments));
+      try { orig && orig.apply(console, arguments); } catch(e){}
+    }
+  });
+})();
+true;
+`;
+
 const BAR_HEIGHT = 60;
 
 Notifications.setNotificationHandler({
@@ -45,6 +68,7 @@ true;
 function RootLayout() {
   const appState = useRef(AppState.currentState);
   const webRef = useRef<WebView>(null);
+  const { onMessage } = useWebViewBridge(webRef);
   const insets = useSafeAreaInsets();
   const webviewRef = useRef<any>(null);
 
@@ -71,6 +95,26 @@ function RootLayout() {
     return () => sub.remove();
   }, []);
 
+  const handleAppStateChange = async (next: AppStateStatus) => {
+    if (appState.current === 'active' && next.match(/inactive|background/)) {
+      await scheduleInactiveUserNotification();
+    }
+    if (appState.current.match(/inactive|background/) && next === 'active') {
+      await cancelInactiveUserNotification();
+    }
+    appState.current = next;
+  };
+
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldPlaySound: true, // 이 값을 true로 해야 iOS에서 진동/소리가 납니다.
+      shouldSetBadge: false,
+      shouldShowBanner: true, // (최신 expo-notifications 타입 호환용)
+      shouldShowList: true, // (최신 expo-notifications 타입 호환용)
+    }),
+  });
+
   const scheduleInactiveUserNotification = async () => {
     const existingId = await AsyncStorage.getItem(INACTIVE_NOTIFICATION_ID_KEY);
     if (existingId) return;
@@ -96,16 +140,6 @@ function RootLayout() {
     }
   };
 
-  const handleAppStateChange = async (next: AppStateStatus) => {
-    if (appState.current === 'active' && next.match(/inactive|background/)) {
-      await scheduleInactiveUserNotification();
-    }
-    if (appState.current.match(/inactive|background/) && next === 'active') {
-      await cancelInactiveUserNotification();
-    }
-    appState.current = next;
-  };
-
   const onNavigationStateChange = useCallback((navState: any) => {
     try {
       const url = new URL(navState.url);
@@ -122,33 +156,40 @@ function RootLayout() {
     <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
       <StatusBar style="dark" translucent backgroundColor="transparent" />
 
-      {/* 단일 WebView */}
-      <View style={styles.webContainer}>
-        <WebView
-          ref={webRef}
-          source={{ uri: `${HOME_URL}/?is_app=true` }}
-          style={styles.webview}
-          javaScriptEnabled
-          domStorageEnabled
-          contentInsetAdjustmentBehavior="never"
-          injectedJavaScript={injectedHideNav}
-          startInLoadingState
-          setSupportMultipleWindows={false}
-          onNavigationStateChange={onNavigationStateChange}
-          onRenderProcessGone={() => webRef.current?.reload()}
-          onContentProcessDidTerminate={() => webRef.current?.reload()}
-        />
-      </View>
+      <SafeAreaView style={{ flex: 1, backgroundColor: APP_BG }} edges={['top', 'bottom']}>
+        {/* 바운스시 비치는 문제 수정 */}
+        <View style={{ flex: 1, backgroundColor: APP_BG }}>
+          <WebView
+            ref={webRef}
+            source={{ uri: `${HOME_URL}/?is_app=true` }}
+            // 웹뷰는 투명처리
+            style={{ flex: 1, backgroundColor: 'transparent' }}
+            contentInsetAdjustmentBehavior="never"
 
-      {/* 네이티브 바텀 내비 오버레이 */}
-      <SafeAreaView
-        edges={['bottom']}
-        style={[styles.navOverlay, { paddingBottom: insets.bottom }]}
-        pointerEvents="box-none"
-      >
-        <View style={[styles.navBar, { height: BAR_HEIGHT }]}>
-          <NativeNavBar currentPath={currentPath} onSelect={onSelect} />
+            //bounces={false} ->> 바운스 일단 넣은 상태
+
+            javaScriptEnabled
+            domStorageEnabled
+            startInLoadingState
+            setSupportMultipleWindows={false}
+            onRenderProcessGone={() => webRef.current?.reload()}
+            onContentProcessDidTerminate={() => webRef.current?.reload()}
+
+            injectedJavaScript={injectedHideNav}
+            injectedJavaScriptBeforeContentLoaded={INJECT_CONSOLE}
+            onMessage={onMessage}
+          />
         </View>
+
+        <SafeAreaView
+          edges={['bottom']}
+          style={[styles.navOverlay, { paddingBottom: insets.bottom }]}
+          pointerEvents="box-none"
+        >
+          <View style={[styles.navBar, { height: BAR_HEIGHT }]}>
+            <NativeNavBar currentPath={currentPath} onSelect={onSelect} />
+          </View>
+        </SafeAreaView>
       </SafeAreaView>
     </SafeAreaView>
   );
