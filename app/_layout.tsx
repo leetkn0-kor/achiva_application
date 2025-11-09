@@ -1,4 +1,5 @@
 
+import { useWebViewBridge } from '@/src/hooks/useWebViewBridge';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import { StatusBar } from 'expo-status-bar';
@@ -36,6 +37,7 @@ true;
 export default function RootLayout() {
   const appState = useRef(AppState.currentState);
   const webref = useRef<WebView>(null);
+  const { onMessage /*, postMessageToWeb*/ } = useWebViewBridge(webref);
 
   useEffect(() => {
     const setupNotifications = async () => {
@@ -126,30 +128,8 @@ export default function RootLayout() {
             onRenderProcessGone={() => webref.current?.reload()}
             onContentProcessDidTerminate={() => webref.current?.reload()}
 
-            onMessage={(e) => {
-              try {
-                const data = JSON.parse(e.nativeEvent.data);
-                if (data.__wv_console__) {
-                  const type = data.type as 'log' | 'info' | 'warn' | 'error' | 'debug';
-                  const args = Array.isArray(data.args) ? data.args : [data.args];
-
-                  // 호출 가능한 메서드만 매핑
-                  const loggers: Record<typeof type, (...a: any[]) => void> = {
-                    log: console.log.bind(console),
-                    info: console.info.bind(console),
-                    warn: console.warn.bind(console),
-                    error: console.error.bind(console),
-                    debug: console.debug.bind(console),
-                  };
-
-                  (loggers[type] ?? console.log)('[WV]', ...args);
-                  return;
-                }
-              } catch {
-                console.log('[WV][message]', e.nativeEvent.data);
-              }
-            }}
-
+            injectedJavaScriptBeforeContentLoaded={INJECT_CONSOLE}
+            onMessage={onMessage}
           />
         </View>
       </SafeAreaView>
