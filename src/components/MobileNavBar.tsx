@@ -8,8 +8,9 @@ const TABS: Tab[] = [
   { label: '홈', path: '/[nickname]/home' },
   { label: '목표', path: '/[nickname]/goals' },
   { label: '피드', path: '/' },
-  { label: '응원함', path: '/cheer' },    // Modal
-  { label: '프로필', path: '/[nickname]/me' },
+  // { label: '응원함', path: '/cheer' },    // Modal
+  { label: '응원함', path: '/accounts/notifications' },
+  { label: '프로필', path: '/[nickname]' },
 ];
 
 interface Props {
@@ -113,6 +114,9 @@ function MyPageIcon({ fill = false }: { fill?: boolean }) {
 }
 
 /* ---------- Styles ---------- */
+const TOP_PAD = 19;   // bar 상단 패딩
+const BORDER_W = 1;   // bar borderTopWidth
+const INDICATOR_PULL_UP = TOP_PAD + BORDER_W;
 
 const COLORS = {
   bg: '#FFFFFF',
@@ -133,13 +137,15 @@ const styles = StyleSheet.create({
   },
   bar: {
     backgroundColor: COLORS.bg,
-    borderTopWidth: 1,
+    borderTopWidth: BORDER_W,
     borderTopColor: COLORS.border,
-    paddingVertical: 19,
+    paddingTop: TOP_PAD,
+    paddingBottom: 19,
     paddingHorizontal: 7,
     flexDirection: 'row',
     justifyContent: 'space-around',
     alignItems: 'flex-start',
+    overflow: 'visible',
     elevation: 10,
     shadowColor: COLORS.shadow,
     shadowOpacity: 0.08,
@@ -150,6 +156,7 @@ const styles = StyleSheet.create({
     width: 44,
     alignItems: 'center',
     justifyContent: 'flex-start',
+    position: 'relative',
   },
   iconBox: {
     width: 32,
@@ -159,7 +166,7 @@ const styles = StyleSheet.create({
   },
   indicator: {
     position: 'absolute',
-    top: 2,
+    top: -INDICATOR_PULL_UP,
     left: 0,
     right: 0,
     height: 3,
