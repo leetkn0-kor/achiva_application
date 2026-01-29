@@ -8,7 +8,7 @@ import { useWebViewBridge } from '../hooks/useWebViewBridge';
 const WebViewScreen: React.FC = () => {
   
   const webViewRef = useRef<WebView>(null);
-  const myWebsiteUrl = 'https://achiva.kr/?is_app=true';
+  const myWebsiteUrl = 'https://achiva-fe-git-develop-achiva.vercel.app/?is_app=true';
   
   // webViewRef를 넘겨주고, onmessage 수신
   const { onMessage } = useWebViewBridge(webViewRef);

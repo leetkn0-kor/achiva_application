@@ -10,7 +10,7 @@ import { WebView } from 'react-native-webview';
 
 
 const APP_BG = '#ffffff'; //웹배경색_확인 후 수정, 로그인 페이지 불일치 수정 필요
-const HOME_URL = 'https://achiva.kr';
+const HOME_URL = 'https://achiva-fe-git-develop-achiva.vercel.app/api/auth/logout';
 
 const INACTIVE_NOTIFICATION_ID_KEY = 'inactive-user-notification-id';
 
@@ -124,12 +124,29 @@ export default function RootLayout() {
             javaScriptEnabled
             domStorageEnabled
             startInLoadingState
-            setSupportMultipleWindows={false}
+
             onRenderProcessGone={() => webref.current?.reload()}
             onContentProcessDidTerminate={() => webref.current?.reload()}
+            
+            sharedCookiesEnabled={true}        // iOS에서 중요
+            thirdPartyCookiesEnabled={true}    // Android에서 중요
+            setSupportMultipleWindows={true}            
+            javaScriptCanOpenWindowsAutomatically={true}
 
             injectedJavaScriptBeforeContentLoaded={INJECT_CONSOLE}
             onMessage={onMessage}
+
+
+            onNavigationStateChange={(nav) => console.log('[WV nav]', nav.url)}
+            onError={(e) => console.log('[WV error]', e.nativeEvent)}
+            onHttpError={(e) =>
+              console.log('[WV http]', e.nativeEvent.statusCode, e.nativeEvent.description, e.nativeEvent.url)
+            }
+            onShouldStartLoadWithRequest={(req) => {
+              console.log('[WV req]', req.url);
+               return true;
+            }}
+
           />
         </View>
       </SafeAreaView>
