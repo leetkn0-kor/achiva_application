@@ -1,3 +1,4 @@
+import Constants from 'expo-constants';
 import * as ImagePicker from 'expo-image-picker';
 import * as Notifications from 'expo-notifications';
 import { MutableRefObject, useRef } from 'react';
@@ -28,8 +29,17 @@ type AppToWebMessage =
 
 type WebViewRef = MutableRefObject<WebView | null>;
 
-// ✅ 여기는 웹(Next.js) 도메인 or API 서버 도메인
+// ✅ 백엔드가 Next.js 안에 있으면 웹 도메인, 별도 API면 api 도메인
 const API_BASE = 'https://achiva-fe-git-develop-achiva.vercel.app';
+
+function getProjectId(): string | undefined {
+  // EAS/Dev Build 환경에서 push token 발급에 projectId가 필요할 수 있음
+  return (
+    Constants.easConfig?.projectId ||
+    (Constants.expoConfig as any)?.extra?.eas?.projectId ||
+    undefined
+  );
+}
 
 export function useWebViewBridge(webViewRef: WebViewRef) {
   const handledLoginRef = useRef(false);
@@ -44,32 +54,47 @@ export function useWebViewBridge(webViewRef: WebViewRef) {
   };
 
   const verifyLinkToken = async (linkToken: string) => {
+    // (선택) 백엔드에 link-verify가 없으면 이 함수/호출을 제거하세요.
     const res = await fetch(`${API_BASE}/api/push/link-verify`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ linkToken }),
     });
+
     if (!res.ok) {
       const text = await res.text().catch(() => '');
       throw new Error(`verify failed: ${res.status} ${text}`);
     }
   };
 
-  // ✅ RootLayout에서 권한 요청을 이미 했으므로, 여기서는 "상태 확인"만
+  /**
+   * ✅ 권한은 "한 번만" 요청하는 게 안전함.
+   * - RootLayout에서 이미 요청하지만, 타이밍/상태 꼬이면 여기서 막힐 수 있음.
+   * - handledLoginRef로 중복 방지하므로 팝업이 반복되진 않음.
+   */
   const ensurePushPermissionGranted = async () => {
-    const { status } = await Notifications.getPermissionsAsync();
+    const perm = await Notifications.getPermissionsAsync();
+    let status = perm.status;
+
     if (status !== 'granted') {
-      // 여기서 다시 requestPermissionsAsync()를 하지 않는 이유:
-      // 로그인 성공 이벤트가 여러 번 오면 사용자에게 권한 팝업이 반복될 수 있음
+      const req = await Notifications.requestPermissionsAsync();
+      status = req.status;
+    }
+
+    if (status !== 'granted') {
       throw new Error('push permission not granted');
     }
   };
 
   const getExpoPushToken = async () => {
-    // iOS 시뮬레이터에서는 토큰이 안 나오는 경우가 있으니, 로그로 확인 추천
-    const token = (await Notifications.getExpoPushTokenAsync()).data;
+    const projectId = getProjectId();
+    const tokenRes = await Notifications.getExpoPushTokenAsync(
+      projectId ? { projectId } : undefined
+    );
+
+    const token = tokenRes.data;
     if (!token) throw new Error('failed to get expoPushToken');
-    return token;
+    return token; // "ExponentPushToken[...]" 형태
   };
 
   const registerPushToken = async (linkToken: string, expoPushToken: string) => {
@@ -79,12 +104,13 @@ export function useWebViewBridge(webViewRef: WebViewRef) {
       body: JSON.stringify({
         linkToken,
         expoPushToken,
-        platform: Platform.OS, // ios | android
+        // ✅ 백엔드 명세가 deviceInfo였음 (platform 말고)
+        deviceInfo: Platform.OS, // "ios" | "android"
       }),
     });
 
+    const text = await res.text().catch(() => '');
     if (!res.ok) {
-      const text = await res.text().catch(() => '');
       throw new Error(`register failed: ${res.status} ${text}`);
     }
   };
@@ -120,25 +146,40 @@ export function useWebViewBridge(webViewRef: WebViewRef) {
           return;
         }
 
-        // 1) linkToken 검증 (선택이지만 권장)
+        // 0) (디버깅용) projectId 확인 로그
+        console.log('[PUSH] projectId:', getProjectId());
+
+        // 1) linkToken 검증 (선택)
         try {
           await verifyLinkToken(typed.linkToken);
           postMessageToWeb({ type: 'PUSH_LINKED', ok: true });
         } catch (e: any) {
-          postMessageToWeb({ type: 'PUSH_LINK_ERROR', ok: false, reason: e?.message ?? 'verify error' });
+          postMessageToWeb({
+            type: 'PUSH_LINK_ERROR',
+            ok: false,
+            reason: e?.message ?? 'verify error',
+          });
           return;
         }
 
-        // 2) 푸시 권한 상태 확인 + expoPushToken 발급 + 서버 등록
+        // 2) 권한 확인/요청 + expoPushToken 발급 + 서버 등록
         try {
           await ensurePushPermissionGranted();
+
           const expoPushToken = await getExpoPushToken();
+          console.log('[PUSH] expoPushToken:', expoPushToken);
+
           await registerPushToken(typed.linkToken, expoPushToken);
 
           postMessageToWeb({ type: 'PUSH_REGISTERED', ok: true });
-          console.log('푸시 토큰 등록 완료:', expoPushToken);
+          console.log('[PUSH] register OK');
         } catch (e: any) {
-          postMessageToWeb({ type: 'PUSH_REGISTER_ERROR', ok: false, reason: e?.message ?? 'register error' });
+          console.log('[PUSH] register error:', e?.message ?? e);
+          postMessageToWeb({
+            type: 'PUSH_REGISTER_ERROR',
+            ok: false,
+            reason: e?.message ?? 'register error',
+          });
         }
 
         return;
