@@ -1,21 +1,22 @@
 {
   "expo": {
-    "name": "appPractice",
-    "slug": "appPractice",
+    "name": "나는오늘운동한다",
+    "slug": "iworkouttoday",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/logo.png",
     "scheme": "apppractice",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "extra": {
+      "router": {},
       "eas": {
-        "projectId": "ef75287f-5d7b-41e8-909b-62210d84d962"
+        "projectId": "58698d26-459a-4db7-aa2b-174d27382993"
       }
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.taekyunlee.appPractice",
+      "bundleIdentifier": "com.iworkouttoday.app",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
@@ -23,15 +24,14 @@
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+        "foregroundImage": "./assets/images/logo.png"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "permissions": [
         "android.permission.RECORD_AUDIO"
-      ]
+      ],
+      "package": "com.iworkouttoday.app"
     },
     "web": {
       "output": "static",
@@ -58,21 +58,21 @@
           }
         }
       ],
-       [
-    "expo-notifications",
-    {
-      "icon": "./assets/images/icon.png",
-      "color": "#ffffff",
-      "sounds": [],
-      "mode": "production"
-    }
-  ],
-      
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#ffffff",
+          "sounds": [],
+          "mode": "production"
+        }
+      ],
       "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "owner": "taekyunlee"
   }
 }

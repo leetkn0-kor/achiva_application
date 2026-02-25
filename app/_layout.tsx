@@ -8,8 +8,14 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 
 const APP_BG = '#ffffff';
-const HOME_URL = 'https://achiva-fe-git-develop-achiva.vercel.app/';
+const HOME_URL = 'https://www.iworkouttoday.com/';
 const INACTIVE_NOTIFICATION_ID_KEY = 'inactive-user-notification-id';
+
+// ✅ [추가됨] 안드로이드용 UserAgent (구글 403 에러 해결용: wv 제거됨)
+const ANDROID_UA = "Mozilla/5.0 (Linux; Android 13; SM-S908B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Mobile Safari/537.36";
+
+// ✅ [추가됨] iOS용 UserAgent (애플/구글 로그인 안정성 확보용)
+const IOS_UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1";
 
 const INJECT_CONSOLE = `
 (function() {
@@ -31,7 +37,6 @@ const INJECT_CONSOLE = `
 true;
 `;
 
-// ✅ 전역(파일 최상단)에서 1회만 설정
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
@@ -65,7 +70,6 @@ export default function RootLayout() {
 
     setupNotifications();
 
-    // ✅ 디버깅 리스너 추가
     const receivedSubscription = Notifications.addNotificationReceivedListener((notification) => {
       console.log('[PUSH] Received:', JSON.stringify(notification));
     });
@@ -85,7 +89,7 @@ export default function RootLayout() {
     };
   }, []);
 
-  const handleAppStateChange = async (next: AppStateStatus) => {
+  const handleAppStateChange = async (next : AppStateStatus) => {
     if (appState.current === 'active' && next.match(/inactive|background/)) {
       await scheduleInactiveUserNotification();
     }
@@ -107,7 +111,8 @@ export default function RootLayout() {
       },
       trigger: {
         type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
-        seconds: 10,
+        // 1일 후 알림 (1일 * 24시간 * 60분 * 60초)
+        seconds: 1 * 24 * 60 * 60,
       },
     });
 
@@ -131,15 +136,23 @@ export default function RootLayout() {
             ref={webref}
             source={{ uri: HOME_URL }}
             style={{ flex: 1, backgroundColor: 'transparent' }}
+            
+            // ✅ [추가됨] 여기서 플랫폼에 맞는 UserAgent를 주입합니다.
+            userAgent={Platform.OS === 'android' ? ANDROID_UA : IOS_UA}
+            
             contentInsetAdjustmentBehavior="never"
             javaScriptEnabled
             domStorageEnabled
-            startInLoadingState
+            startInLoadingState 
             onRenderProcessGone={() => webref.current?.reload()}
             onContentProcessDidTerminate={() => webref.current?.reload()}
             sharedCookiesEnabled
             thirdPartyCookiesEnabled
-            setSupportMultipleWindows
+            
+            // ✅ [수정됨] false로 설정하는 것을 권장합니다.
+            // 구글 로그인이 팝업을 띄우려 할 때, false면 현재 창에서 페이지가 이동되어 흐름이 더 매끄럽습니다.
+            setSupportMultipleWindows={false}
+            
             javaScriptCanOpenWindowsAutomatically
             injectedJavaScriptBeforeContentLoaded={INJECT_CONSOLE}
             onMessage={onMessage}

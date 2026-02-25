@@ -30,10 +30,12 @@ type AppToWebMessage =
 type WebViewRef = MutableRefObject<WebView | null>;
 
 // ✅ 백엔드가 Next.js 안에 있으면 웹 도메인, 별도 API면 api 도메인
-const API_BASE = 'https://achiva-fe-git-develop-achiva.vercel.app';
+const API_BASE = 'https://container-service-1.wffkggdq3jc9m.ap-northeast-2.cs.amazonlightsail.com';
+
+// ✅ 지금 상황(1회용 토큰 소비 의심)에서는 link-verify를 기본 OFF 권장
+const ENABLE_LINK_VERIFY = false;
 
 function getProjectId(): string | undefined {
-  // EAS/Dev Build 환경에서 push token 발급에 projectId가 필요할 수 있음
   return (
     Constants.easConfig?.projectId ||
     (Constants.expoConfig as any)?.extra?.eas?.projectId ||
@@ -41,8 +43,15 @@ function getProjectId(): string | undefined {
   );
 }
 
+// ✅ 백엔드 명세가 deviceInfo: "android/ios/" 로 써있어서 일단 그 형태로 맞춰 보냄
+function getDeviceInfo(): string {
+  // 필요하면 백엔드와 합의해서 "ios" | "android" 로 바꾸는 게 깔끔함
+  return Platform.OS === 'ios' ? 'ios/' : 'android/';
+}
+
 export function useWebViewBridge(webViewRef: WebViewRef) {
-  const handledLoginRef = useRef(false);
+  // "한 번만" 처리하되, 실패하면 재시도 가능하도록 설계
+  const inFlightRef = useRef(false);
 
   const postMessageToWeb = (message: AppToWebMessage) => {
     if (!webViewRef.current) return;
@@ -54,24 +63,20 @@ export function useWebViewBridge(webViewRef: WebViewRef) {
   };
 
   const verifyLinkToken = async (linkToken: string) => {
-    // (선택) 백엔드에 link-verify가 없으면 이 함수/호출을 제거하세요.
     const res = await fetch(`${API_BASE}/api/push/link-verify`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ linkToken }),
     });
 
+    const text = await res.text().catch(() => '');
+    console.log('[PUSH] link-verify status:', res.status, 'body:', text);
+
     if (!res.ok) {
-      const text = await res.text().catch(() => '');
       throw new Error(`verify failed: ${res.status} ${text}`);
     }
   };
 
-  /**
-   * ✅ 권한은 "한 번만" 요청하는 게 안전함.
-   * - RootLayout에서 이미 요청하지만, 타이밍/상태 꼬이면 여기서 막힐 수 있음.
-   * - handledLoginRef로 중복 방지하므로 팝업이 반복되진 않음.
-   */
   const ensurePushPermissionGranted = async () => {
     const perm = await Notifications.getPermissionsAsync();
     let status = perm.status;
@@ -81,6 +86,8 @@ export function useWebViewBridge(webViewRef: WebViewRef) {
       status = req.status;
     }
 
+    console.log('[PUSH] permission status:', status);
+
     if (status !== 'granted') {
       throw new Error('push permission not granted');
     }
@@ -88,6 +95,8 @@ export function useWebViewBridge(webViewRef: WebViewRef) {
 
   const getExpoPushToken = async () => {
     const projectId = getProjectId();
+    console.log('[PUSH] projectId:', projectId);
+
     const tokenRes = await Notifications.getExpoPushTokenAsync(
       projectId ? { projectId } : undefined
     );
@@ -98,18 +107,29 @@ export function useWebViewBridge(webViewRef: WebViewRef) {
   };
 
   const registerPushToken = async (linkToken: string, expoPushToken: string) => {
+    const deviceInfo = getDeviceInfo();
+
+    // ✅ 요청 바디 로그 (민감정보는 마스킹)
+    console.log('[PUSH] register request payload:', {
+      linkToken: linkToken.slice(0, 18) + '...',
+      expoPushToken,
+      deviceInfo,
+    });
+
     const res = await fetch(`${API_BASE}/api/push/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         linkToken,
         expoPushToken,
-        // ✅ 백엔드 명세가 deviceInfo였음 (platform 말고)
-        deviceInfo: Platform.OS, // "ios" | "android"
+        deviceInfo, // ✅ 명세 필드명 + 값 형태 맞추기
       }),
     });
 
+    // ✅ 여기 반드시 찍어야 함: 백엔드가 PUSH001~005 중 뭘 주는지 확인 가능
     const text = await res.text().catch(() => '');
+    console.log('[PUSH] register response:', res.status, text);
+
     if (!res.ok) {
       throw new Error(`register failed: ${res.status} ${text}`);
     }
@@ -138,32 +158,24 @@ export function useWebViewBridge(webViewRef: WebViewRef) {
       }
 
       if (typed.type === 'LOGIN_SUCCESS') {
-        if (handledLoginRef.current) return;
-        handledLoginRef.current = true;
+        // ✅ 중복 실행 방지(동시에 여러 번 들어오는 경우)
+        if (inFlightRef.current) return;
+        inFlightRef.current = true;
 
-        if (!typed.linkToken) {
-          postMessageToWeb({ type: 'PUSH_LINK_ERROR', ok: false, reason: 'missing linkToken' });
-          return;
-        }
-
-        // 0) (디버깅용) projectId 확인 로그
-        console.log('[PUSH] projectId:', getProjectId());
-
-        // 1) linkToken 검증 (선택)
         try {
-          await verifyLinkToken(typed.linkToken);
-          postMessageToWeb({ type: 'PUSH_LINKED', ok: true });
-        } catch (e: any) {
-          postMessageToWeb({
-            type: 'PUSH_LINK_ERROR',
-            ok: false,
-            reason: e?.message ?? 'verify error',
-          });
-          return;
-        }
+          if (!typed.linkToken) {
+            postMessageToWeb({ type: 'PUSH_LINK_ERROR', ok: false, reason: 'missing linkToken' });
+            return;
+          }
 
-        // 2) 권한 확인/요청 + expoPushToken 발급 + 서버 등록
-        try {
+          // 1) (선택) linkToken 검증
+          // ✅ 1회용 토큰 소비(PUSH003) 의심 있으면 우선 끄고 register부터 통과시키는 게 맞음
+          if (ENABLE_LINK_VERIFY) {
+            await verifyLinkToken(typed.linkToken);
+            postMessageToWeb({ type: 'PUSH_LINKED', ok: true });
+          }
+
+          // 2) 권한 확인 + 토큰 발급 + 서버 등록
           await ensurePushPermissionGranted();
 
           const expoPushToken = await getExpoPushToken();
@@ -174,11 +186,16 @@ export function useWebViewBridge(webViewRef: WebViewRef) {
           postMessageToWeb({ type: 'PUSH_REGISTERED', ok: true });
           console.log('[PUSH] register OK');
         } catch (e: any) {
-          console.log('[PUSH] register error:', e?.message ?? e);
+          const msg = e?.message ?? String(e);
+          console.log('[PUSH] flow error:', msg);
+
+          // ✅ 실패하면 재시도 가능하도록 inFlight를 풀어줌
+          inFlightRef.current = false;
+
           postMessageToWeb({
             type: 'PUSH_REGISTER_ERROR',
             ok: false,
-            reason: e?.message ?? 'register error',
+            reason: msg,
           });
         }
 
