@@ -1,21 +1,18 @@
 import { useWebViewBridge } from '@/src/hooks/useWebViewBridge';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import { StatusBar } from 'expo-status-bar';
-import React, { useEffect, useRef } from 'react';
-import { AppState, AppStateStatus, Platform, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { AppState, AppStateStatus, BackHandler, Platform, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 
 const APP_BG = '#ffffff';
-const HOME_URL = 'https://www.iworkouttoday.com/';
-const INACTIVE_NOTIFICATION_ID_KEY = 'inactive-user-notification-id';
+const HOME_URL = 'https://www.iworkouttoday.com/?is_app=true'; // app=true 지워도 상관없을듯?
 
-// ✅ [추가됨] 안드로이드용 UserAgent (구글 403 에러 해결용: wv 제거됨)
+// 아래는 os별 useragent - 크롬(안드로이드) 사파리(ios) 구글 오픈로그인 접속 가능
 const ANDROID_UA = "Mozilla/5.0 (Linux; Android 13; SM-S908B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Mobile Safari/537.36";
-
-// ✅ [추가됨] iOS용 UserAgent (애플/구글 로그인 안정성 확보용)
-const IOS_UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1";
+const IPHONE_UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1";
+const IPAD_UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15";
 
 const INJECT_CONSOLE = `
 (function() {
@@ -37,6 +34,42 @@ const INJECT_CONSOLE = `
 true;
 `;
 
+const INJECT_LAYOUT_FIX = `
+  // 1.두 손가락 줌 & 더블 탭 줌 강제 무력화
+  document.addEventListener('touchstart', function(event) {
+    if (event.touches.length > 1) { event.preventDefault(); }
+  }, { passive: false });
+
+  var lastTouchEnd = 0;
+  document.addEventListener('touchend', function(event) {
+    var now = (new Date()).getTime();
+    if (now - lastTouchEnd <= 300) { event.preventDefault(); }
+    lastTouchEnd = now;
+  }, { passive: false });
+
+  // 2. 가로로 삐져나가는 요소 강제 절단 (레이아웃 틀어짐 원천 차단 CSS)
+  var style = document.createElement('style');
+  style.innerHTML = 'html, body { width: 100vw !important; max-width: 100% !important; overflow-x: hidden !important; margin: 0 !important; padding: 0 !important; }';
+  document.head.appendChild(style);
+
+  // 3.  Next.js가 페이지 이동할 때 뷰포트 몰래 바꾸는 걸 0.5초마다 감시해서 1.0배율로 강제 고정
+  setInterval(function() {
+    var meta = document.querySelector('meta[name="viewport"]');
+    var content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, shrink-to-fit=no';
+    
+    if (!meta) {
+      meta = document.createElement('meta');
+      meta.name = 'viewport';
+      meta.content = content;
+      document.head.appendChild(meta);
+    } else if (meta.content !== content) {
+      meta.content = content;
+    }
+  }, 500);
+
+  true;
+`;
+
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
@@ -52,6 +85,26 @@ export default function RootLayout() {
   const webref = useRef<WebView>(null);
   const { onMessage } = useWebViewBridge(webref);
 
+  const [swipeEnabled, setSwipeEnabled] = useState(false); // iOS 스와이프 온오프 스위치
+  const canGoBack = useRef(false); // 웹뷰가 뒤로 갈 수 있는지 여부
+  const isExternalAuthRef = useRef(false); // 현재 외부(구글/애플) 창인지 여부
+
+  // 🚨 [새로 추가된 부분 1] 안드로이드 물리 '뒤로 가기' 버튼 제어!
+  useEffect(() => {
+    const onBackPress = () => {
+      // "외부 로그인 창"이면서 "뒤로 갈 페이지가 있을 때"만 웹뷰 뒤로 가기 실행
+      if (webref.current && canGoBack.current && isExternalAuthRef.current) {
+        webref.current.goBack();
+        return true; // 안드로이드 앱 강제 종료 방지
+      }
+      return false; // 우리 앱 내부라면 원래대로 무시 (앱 종료 또는 프론트엔드 라우팅에 맡김)
+    };
+
+    // ✅ 여기서 깔끔하게 .remove() 방식으로 변경!
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => backHandler.remove();
+  }, []);
+
   useEffect(() => {
     const setupNotifications = async () => {
       const { status } = await Notifications.requestPermissionsAsync();
@@ -59,8 +112,8 @@ export default function RootLayout() {
       if (status !== 'granted') return;
 
       if (Platform.OS === 'android') {
-        await Notifications.setNotificationChannelAsync('default', {
-          name: 'default',
+        await Notifications.setNotificationChannelAsync('popup-channel', {
+          name: '팝업알림',
           importance: Notifications.AndroidImportance.MAX,
           vibrationPattern: [0, 250, 250, 250],
           lightColor: '#FF231F7C',
@@ -80,7 +133,7 @@ export default function RootLayout() {
 
     const sub = AppState.addEventListener('change', handleAppStateChange);
 
-    cancelInactiveUserNotification();
+    Notifications.cancelAllScheduledNotificationsAsync();
 
     return () => {
       receivedSubscription.remove();
@@ -89,42 +142,26 @@ export default function RootLayout() {
     };
   }, []);
 
-  const handleAppStateChange = async (next : AppStateStatus) => {
+  const handleAppStateChange = async (next: AppStateStatus) => {
+    if (next === 'active') {
+      await Notifications.cancelAllScheduledNotificationsAsync();
+    }
+    
     if (appState.current === 'active' && next.match(/inactive|background/)) {
-      await scheduleInactiveUserNotification();
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: '오랜만이에요! 👋',
+          body: '새로운 소식이 기다리고 있어요. 다시 방문해보세요!',
+          sound: true,
+        },
+        trigger: {
+          type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+          seconds: 24 * 60 * 60, // 24시간
+        },
+      });
     }
-    if (appState.current.match(/inactive|background/) && next === 'active') {
-      await cancelInactiveUserNotification();
-    }
+
     appState.current = next;
-  };
-
-  const scheduleInactiveUserNotification = async () => {
-    const existingId = await AsyncStorage.getItem(INACTIVE_NOTIFICATION_ID_KEY);
-    if (existingId) return;
-
-    const id = await Notifications.scheduleNotificationAsync({
-      content: {
-        title: '오랜만이에요! 👋',
-        body: '새로운 소식이 기다리고 있어요. 다시 방문해보세요!',
-        sound: true,
-      },
-      trigger: {
-        type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
-        // 1일 후 알림 (1일 * 24시간 * 60분 * 60초)
-        seconds: 1 * 24 * 60 * 60,
-      },
-    });
-
-    await AsyncStorage.setItem(INACTIVE_NOTIFICATION_ID_KEY, id);
-  };
-
-  const cancelInactiveUserNotification = async () => {
-    const id = await AsyncStorage.getItem(INACTIVE_NOTIFICATION_ID_KEY);
-    if (id) {
-      await Notifications.cancelScheduledNotificationAsync(id);
-      await AsyncStorage.removeItem(INACTIVE_NOTIFICATION_ID_KEY);
-    }
   };
 
   return (
@@ -137,9 +174,23 @@ export default function RootLayout() {
             source={{ uri: HOME_URL }}
             style={{ flex: 1, backgroundColor: 'transparent' }}
             
-            // ✅ [추가됨] 여기서 플랫폼에 맞는 UserAgent를 주입합니다.
-            userAgent={Platform.OS === 'android' ? ANDROID_UA : IOS_UA}
+            userAgent={
+             Platform.OS === 'android' 
+             ? ANDROID_UA 
+             : (Platform.OS === 'ios' && (Platform as any).isPad ? IPAD_UA : IPHONE_UA)
+            }
             
+            setBuiltInZoomControls={false}  
+            textZoom={100}                  
+            scalesPageToFit={false}         
+            bounces={true}                 
+            showsHorizontalScrollIndicator={false} 
+
+            // 🚨 [새로 추가된 부분 2] iOS 외부창 한정 스와이프 허용
+            allowsBackForwardNavigationGestures={swipeEnabled}
+
+            injectedJavaScript={INJECT_LAYOUT_FIX}
+
             contentInsetAdjustmentBehavior="never"
             javaScriptEnabled
             domStorageEnabled
@@ -149,14 +200,22 @@ export default function RootLayout() {
             sharedCookiesEnabled
             thirdPartyCookiesEnabled
             
-            // ✅ [수정됨] false로 설정하는 것을 권장합니다.
-            // 구글 로그인이 팝업을 띄우려 할 때, false면 현재 창에서 페이지가 이동되어 흐름이 더 매끄럽습니다.
             setSupportMultipleWindows={false}
-            
             javaScriptCanOpenWindowsAutomatically
             injectedJavaScriptBeforeContentLoaded={INJECT_CONSOLE}
             onMessage={onMessage}
-            onNavigationStateChange={(nav) => console.log('[WV nav]', nav.url)}
+            
+            // 🚨 [새로 추가된 부분 3] URL 변경 감지하여 스위치 껐다 켜기
+            onNavigationStateChange={(nav) => {
+              console.log('[WV nav]', nav.url);
+              canGoBack.current = nav.canGoBack;
+              
+              // 현재 URL에 'iworkouttoday.com'이 없으면 외부(구글/애플)로 간주!
+              const isExternal = !nav.url.includes('iworkouttoday.com');
+              isExternalAuthRef.current = isExternal;
+              setSwipeEnabled(isExternal);
+            }}
+
             onError={(e) => console.log('[WV error]', e.nativeEvent)}
             onHttpError={(e) =>
               console.log('[WV http]', e.nativeEvent.statusCode, e.nativeEvent.description, e.nativeEvent.url)

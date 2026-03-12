@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "207154095688",
+    "project_id": "iworkouttoday-808f1",
+    "storage_bucket": "iworkouttoday-808f1.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:207154095688:android:54c3d297eb3f29a055da7d",
+        "android_client_info": {
+          "package_name": "com.iworkouttoday.app.test"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBAtmoxlSveVmpCAvt19ITt1hKe71-DYaY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -17,6 +17,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.iworkouttoday.app",
+      "buildNumber": "2",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
@@ -31,7 +32,9 @@
       "permissions": [
         "android.permission.RECORD_AUDIO"
       ],
-      "package": "com.iworkouttoday.app"
+      "package": "com.iworkouttoday.app.test",
+      "googleServicesFile": "./google-services.json",
+      "versionCode": 1
     },
     "web": {
       "output": "static",
